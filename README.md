@@ -1,0 +1,2 @@
+# DummyAppForSonarQubeCPPMFC
+DummyAppForSonarQube CPP plugin
