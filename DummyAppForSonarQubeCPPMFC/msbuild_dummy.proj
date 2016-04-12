@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="build" ToolsVersion="3.5" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<PropertyGroup>
+		<PlatformToolset>v110_xp</PlatformToolset>
+	</PropertyGroup>
+	<PropertyGroup>
+		<Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+		<ConfigurationDebug>Debug</ConfigurationDebug>
+		<SolutionTarget Condition="'$(SolutionTarget)' == ''">Build</SolutionTarget>
+		<OutputDir>./App/KKBOX.WPF/bin/x86/Debug/</OutputDir>
+		<OutputDirDebug>./_output/Debug/</OutputDirDebug>		
+		<TestResultsDir>../../TestResults/</TestResultsDir>
+		<PdbDir>./_program_database/Release/</PdbDir>
+		<SetupSrcDir>./App/KKBOX.WPF/Installer/src/</SetupSrcDir>
+		<SetupOutDir>./App/KKBOX.WPF/Installer/out/</SetupOutDir>
+		<BuildSetupBatFile>./KKBOX_Install/big5/msbuild_Release.bat</BuildSetupBatFile>
+		<SignBinaryBatFile>sign_binary_Release.bat</SignBinaryBatFile>
+		<SignSetupFileBatFile>./KKBOX_Install/big5/sign_setup.bat</SignSetupFileBatFile>
+		<ClearOutFileBatFile>./KKBOX_Install/big5/clear_out_file.bat</ClearOutFileBatFile>
+		<ExportKKBOXLocalizationBatFile>./KKBOX_Install/big5/Export_KKBOX_Localization.bat</ExportKKBOXLocalizationBatFile>
+		<VersionHeaderFile>version.h</VersionHeaderFile>
+		<ResCompactResourceFile>res_compact.rc</ResCompactResourceFile>
+		<SetupBuildNumberFileOFFICIAL>./KKBOX_Install/big5/build_Release_OFFICIAL.ini</SetupBuildNumberFileOFFICIAL>		
+		<SetupBuildNumberFileASUS>./KKBOX_Install/big5/build_Release_ASUS.ini</SetupBuildNumberFileASUS>
+		<SetupBuildNumberFileYKK>./KKBOX_Install/big5/build_Release_YKK.ini</SetupBuildNumberFileYKK>
+		<SetupBuildNumberFileDONGLE>./KKBOX_Install/big5/build_Release_DONGLE.ini</SetupBuildNumberFileDONGLE>
+		<VersionOutputFile>version_string.txt</VersionOutputFile>
+		<FullVersionOutputFile>FullVersion.txt</FullVersionOutputFile>
+		<BuildNumberFile>BuildNumber.txt</BuildNumberFile>
+		<GitRevisionFile>GitRevision.txt</GitRevisionFile>
+		<BuildNumberPropertyFile>BuildNumberProperty.txt</BuildNumberPropertyFile>
+		<DoxygenBatchfile>../doxygen/doxygen_kkbox_client_win32.bat</DoxygenBatchfile>
+		<CppcheckExe>"C:/Program Files/Cppcheck/Cppcheck.exe"</CppcheckExe>
+		<CppcheckResult>cppcheck-result.xml</CppcheckResult>
+		<GTestRunnerExe>GTestRunner.exe</GTestRunnerExe>	
+	</PropertyGroup>
+
+	<ItemGroup>
+		<VCSolution Include ="DummyAppForSonarQubeCPPMFC.sln"/>
+		<BuildNumPhp Include ="./BuildTool/build_num.php"/>
+		<BuildNumFile Include ="./BuildTool/build_num.dat"/>
+		<GTestRunnerResult Include="$(OutputDir)gtest_runner_res.xml" />
+		<VSTestRunnerResult Include="$(TestResultsDir)*.trx" />
+		<CopySetupFileDest Include="$(SetupOutDir)KKBOX_RELEASE_OFFICIAL.exe"/>
+	</ItemGroup>
+	
+	<!-- for zip task -->
+	<Import Project="$(MSBuildExtensionsPath)\MSBuildCommunityTasks\MSBuild.Community.Tasks.Targets"/>
+	
+	<Target Name="GetVersion">
+		<ReadLinesFromFile
+			File="$(VersionOutputFile)" >
+			<Output
+				TaskParameter="Lines"
+				ItemName="VersionString"
+			/>
+			<Output
+				TaskParameter="Lines"
+				PropertyName="SetupFile"
+			/>						
+		</ReadLinesFromFile>
+		<Message Text="VersionString=@(VersionString)"/>
+		<Error
+			Text="Version String is empty"
+			Condition="@(VersionString) == ''" 
+		/>
+	</Target>
+	
+	<Target Name="GetNextBuildNumberPropertyFile">
+		<Exec Command="cscript GetNextBuildNumberPropertyFile.js $(VersionHeaderFile) $(BuildNumberPropertyFile)"/> 
+	</Target>
+	
+	<Target Name="IncreaseBuildNumber">
+		<Exec Command="$(ClearOutFileBatFile)" />
+		<Exec Command="IF NOT EXIST $(BuildNumberFile) ECHO 0 > $(BuildNumberFile)"/>
+		<Exec Command="IF NOT EXIST $(BuildNumberPropertyFile) ECHO KKBOX_BUILD_NUMBER=0 > $(BuildNumberPropertyFile)"/>
+		<Exec Command="cscript GetVersion.js $(VersionHeaderFile) $(VersionOutputFile)"/> 
+		<Exec Command="cscript IncreaseBuildNumber.js $(VersionOutputFile) $(BuildNumberFile) $(VersionHeaderFile) $(ResCompactResourceFile) $(SetupBuildNumberFileOFFICIAL) $(SetupBuildNumberFileASUS) $(SetupBuildNumberFileYKK) $(SetupBuildNumberFileDONGLE) $(BuildNumberPropertyFile)"/>
+		<Exec Command="cscript GetVersion.js $(VersionHeaderFile) $(VersionOutputFile) $(FullVersionOutputFile) 'true'"/>   
+		<CallTarget Targets="GetVersion"/>
+	</Target>
+	
+	<Target Name="AddGitRevision">
+		<Exec Command="IF NOT EXIST $(GitRevisionFile) ECHO 0 > $(GitRevisionFile)"/>
+		<Exec Command="cscript AddGitRevision.js $(GitRevisionFile) $(VersionHeaderFile)"/>
+	</Target>
+	
+	<Target Name="BuildSolution">
+		<MSBuild
+			Projects="@(VCSolution)"
+			Properties="Configuration=$(Configuration)"      
+			StopOnFirstFailure="true"
+			Targets="$(SolutionTarget)">
+		</MSBuild>
+	</Target>	
+	
+	<Target Name="BuildGTestRunner">
+		<Delete Files="@(GTestRunnerResult)" />
+		<MSBuild
+			Projects="@(VCSolution)"
+			Properties="Configuration=$(ConfigurationDebug)"      
+			StopOnFirstFailure="true"
+			Targets="$(GTestRunnerTarget)">
+		</MSBuild>		
+		<Exec Command="$(GTestRunnerExe)" WorkingDirectory="$(OutputDirDebug)" />
+	</Target>	
+
+	<!-- for VSTest -->
+	<Target Name="BuildVSTest">
+		<Delete Files="@(VSTestRunnerResult)" />
+		<MSBuild
+			Projects="@(VCSolution)"
+			Properties="Configuration=$(Configuration)"      
+			StopOnFirstFailure="true"
+			Targets="$(VSTestKKBOX)">
+		</MSBuild>		
+	</Target>	
+
+	<Target Name="FilesCheck">
+		<Error Text="Can not find KKBOX.exe under $(OutputDir)"
+			Condition="!Exists('$(OutputDir)KKBOX.exe')" />
+		<Error Text="Can not find libcef.dll under $(OutputDir)"
+			Condition="!Exists('$(OutputDir)libcef.dll')" />	
+	</Target>
+	
+	<Target Name="UpdateReleaseFileComponent">
+		<ItemGroup>
+		<ReleaseFileComponent Include="$(OutputDir)*.exe" />
+		<ReleaseFileComponent Include="$(OutputDir)*.dll" />
+		<ReleaseFileComponent Include="$(OutputDir)x86/*.dll" />
+		<ReleaseFileComponent Include="$(OutputDir)*.bin" />
+		<ReleaseFileComponent Include="$(OutputDir)*.pak" />
+		<ReleaseFileComponent Include="$(OutputDir)icudtl.dat" />
+		<LocalesPak Include="$(OutputDir)locales\*.*" />
+		<LangPak_en Include="$(OutputDir)en\*.*" />
+		<LangPak_ja Include="$(OutputDir)ja\*.*" />
+		<LangPak_ms Include="$(OutputDir)ms\*.*" />
+		<LangPak_th Include="$(OutputDir)th\*.*" />
+		<LangPak_zh-Hans Include="$(OutputDir)zh-Hans\*.*" />
+		<LangPak_zh-Hant Include="$(OutputDir)zh-Hant\*.*" />
+		
+		
+		<PdbComponent Include="$(PdbDir)kkbox_dsp.pdb" />
+		<PdbComponent Include="$(PdbDir)kkbox_vis.pdb" />
+		<PdbComponent Include="$(PdbDir)kkbox_wrc2.pdb" />
+		<PdbComponent Include="$(PdbDir)KKBOXLauncher.pdb" />
+		<PdbComponent Include="$(PdbDir)KKBOXNews(nores).pdb" />
+		<PdbComponent Include="$(PdbDir)KKBOX.pdb" />
+		<PdbComponent Include="$(PdbDir)KKBOX_Tray.pdb" />
+		<PdbComponent Include="$(PdbDir)ResCHS.pdb" />
+		<PdbComponent Include="$(PdbDir)ResCHT.pdb" />
+		<PdbComponent Include="$(PdbDir)ResCommon.pdb" />
+		<PdbComponent Include="$(PdbDir)ResENG.pdb" />
+		<PdbComponent Include="$(PdbDir)sqlite3DLL.pdb" />
+		</ItemGroup>
+	</Target>
+	
+	<Target Name="CopyBinaryFile">
+		<Copy
+			SourceFiles="@(ReleaseFileComponent)"
+			DestinationFolder="$(SetupSrcDir)"
+		/>
+		<Copy
+			SourceFiles="@(LocalesPak)"
+			DestinationFolder="$(SetupSrcDir)locales\"
+		/>
+		<Copy
+			SourceFiles="@(LangPak_en)"
+			DestinationFolder="$(SetupSrcDir)en\"
+		/>
+		<Copy
+			SourceFiles="@(LangPak_ja)"
+			DestinationFolder="$(SetupSrcDir)ja\"
+		/>
+		<Copy
+			SourceFiles="@(LangPak_ms)"
+			DestinationFolder="$(SetupSrcDir)ms\"
+		/>
+		<Copy
+			SourceFiles="@(LangPak_th)"
+			DestinationFolder="$(SetupSrcDir)th\"
+		/>
+		<Copy
+			SourceFiles="@(LangPak_zh-Hans)"
+			DestinationFolder="$(SetupSrcDir)zh-Hans\"
+		/>
+		<Copy
+			SourceFiles="@(LangPak_zh-Hant)"
+			DestinationFolder="$(SetupSrcDir)zh-Hant\"
+		/>
+	
+	</Target>
+	
+	<Target Name="SignBinaryFile">
+		<Exec Command="$(SignBinaryBatFile)" />
+	</Target>
+	
+	<Target Name="BuildSetupFile">		
+		<Exec Command="$(BuildSetupBatFile)" />
+	</Target>
+	
+	<Target Name="SignSetupFile">
+		<Exec Command="$(SignSetupFileBatFile)" />
+	</Target>
+	
+	<Target Name="Doxygen">
+		<Exec Command="$(DoxygenBatchfile)" />
+	</Target>
+
+	<Target Name="ExportKKBOXLocalization">
+		<Exec Command="$(ExportKKBOXLocalizationBatFile)" />
+	</Target>
+	
+	<Target Name="ZipPackageAndPdbFile">
+		<!-- 
+		kkbox_Intl_4.2.0.0150_build_963.zip 
+		-->
+		<ItemGroup>
+			<ZipFiles Include="@(ReleaseFileComponent)"/>
+			<ZipFiles Include="@(LocalesPak)"/>
+		</ItemGroup>
+		<Zip Files="@(ZipFiles)"
+			WorkingDirectory="$(OutputDir)" 
+			ZipFileName="$(SetupOutDir)KKBOX_RELEASE_@(VersionString).zip"
+			ZipLevel="9" />
+		<Zip Files="@(PdbComponent)"
+			WorkingDirectory="$(PdbDir)" 
+			ZipFileName="$(SetupOutDir)KKBOX_RELEASE_@(VersionString)_pdb.zip"
+			ZipLevel="9" />
+	</Target>
+	
+	<Target Name="RebuildCppcheckResult">		
+		<!-- Because hudson cppcheck plugin use workspace as working directory, 
+			we must set cppcheck execute at the same directory -->	  
+	  <Exec Command="$(CppcheckExe) --force --xml -ikkbox_client\win32\sqlite3DLL -ikkbox_client\win32\sqlite -ikkbox_client\win32\CxImage skylib kkbox_client\win32 2> $(CppcheckResult)" WorkingDirectory="..\..\" />
+	</Target>
+	
+	<Target Name="CopySetupFileForGuiTest">		
+		<CreateItem Include="$(SetupOutDir)KKBOX_RELEASE_OFFICIAL_*.exe">
+    	<Output TaskParameter="Include" ItemName="SetupFile" />
+		</CreateItem>
+		<Copy
+			SourceFiles="@(SetupFile)"
+			DestinationFiles="@(CopySetupFileDest)"
+		/>		
+	</Target>
+	
+	<Target Name="build">
+		<!-- 
+    	Build:
+		increase build num
+		build solution
+		sign kkbox.exe, kkbox_tray.exe
+		build setup file
+		sign setup file
+		zip Package file
+		copy setup file for gui test.
+		export KKBOX localization file
+		-->
+		<!--
+		<CallTarget Targets="Doxygen"/>
+		<CallTarget Targets="IncreaseBuildNumber"/>
+		<CallTarget Targets="AddGitRevision"/>
+		-->
+		<CallTarget Targets="BuildSolution"/>
+		<!--
+		<CallTarget Targets="BuildGTestRunner"/>
+		<CallTarget Targets="FilesCheck"/>
+		<CallTarget Targets="UpdateReleaseFileComponent"/>
+		<CallTarget Targets="CopyBinaryFile"/>
+		<CallTarget Targets="SignBinaryFile"/>
+		<CallTarget Targets="BuildSetupFile"/>
+		<CallTarget Targets="SignSetupFile"/>
+		<CallTarget Targets="ZipPackageAndPdbFile"/>
+		<CallTarget Targets="CopySetupFileForGuiTest"/>
+		<CallTarget Targets="ExportKKBOXLocalization"/>
+		-->
+	</Target>
+
+
+	<Target Name="DoxygenGtest">
+		<CallTarget Targets="Doxygen"/>
+		<CallTarget Targets="BuildGTestRunner"/>
+	</Target>
+
+	
+</Project>
